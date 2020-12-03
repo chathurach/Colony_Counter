@@ -7,6 +7,8 @@ import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
 import 'package:image/image.dart' as img;
 //import 'dart:math';
 //import 'package:collection/collection.dart';
+import 'package:yolo_tflite/recognition.dart';
+import 'dart:math';
 
 void main() => runApp(MaterialApp(
       home: Home(),
@@ -29,6 +31,7 @@ class _HomeState extends State<Home> {
   List<List<int>> _outputShape;
   List<tfl.TfLiteType> _outputType;
   tfl.TfLiteType _inputType;
+  img.Image _image;
   //TensorBuffer _outputBuffer;
 
   Future getImage() async {
@@ -36,8 +39,8 @@ class _HomeState extends State<Home> {
       source: ImageSource.gallery,
     );
     //final File file = File(pickedImage.path);
-    img.Image _image =
-        img.decodeImage(File(pickedImage.path).readAsBytesSync());
+    _image = img.decodeImage(File(pickedImage.path).readAsBytesSync());
+
     //final File file = File(pickedImage.path);
     // setState(() {
     //   _busy = true;
@@ -84,7 +87,7 @@ class _HomeState extends State<Home> {
       });
       //_outputBuffer = TensorBuffer.createFixedSize(_outputShape, _outputType);
       print(_inputShape);
-      print(_outputShape);
+      print(_outputShape[0][2]);
       print('load model sucess!');
     } on Exception catch (e) {
       print('Error while loading the model: $e');
@@ -107,13 +110,92 @@ class _HomeState extends State<Home> {
       0: outputLocations.buffer,
       1: outputClassScores,
     };
-    //List<Object> inputs = [_inputImage.buffer];
+    List<Object> inputs = [_inputImage.buffer];
     // print(_inputImage.height);
     // print(_inputImage.width);
 
-    interpreter.run(_inputImage.getBuffer(), outputs);
+    interpreter.runForMultipleInputs(inputs, outputs);
     print('model ran');
-    print(outputs);
+
+    List<Rect> locations = BoundingBoxUtils.convert(
+      tensor: outputLocations,
+      //valueIndex: [1, 0, 3, 2], Commented out because default order is needed.
+      boundingBoxAxis: 2,
+      boundingBoxType: BoundingBoxType.CENTER,
+      coordinateType: CoordinateType.PIXEL,
+      height: 832,
+      width: 832,
+    );
+    print(locations[1].topLeft);
+    print(locations[2].topLeft);
+    print(locations[3].topLeft);
+    print(locations[4].topLeft);
+    print(locations[5].topLeft);
+    print(locations[6].topLeft);
+    print(locations[7].topLeft);
+    print(locations[8].topLeft);
+    print(locations[9].topLeft);
+    print(locations[10].topLeft);
+
+    List<Recognition> recognitions = [];
+
+    var gridWidth = _outputShape[0][1];
+    //print("gridWidth = $gridWidth");
+
+    for (int i = 0; i < gridWidth; i++) {
+      // Since we are given a list of scores for each class for
+      // each detected Object, we are interested in finding the class
+      // with the highest output score
+
+      var maxClassScore = 0.00;
+      var labelIndex = -1;
+
+      for (int c = 0; c < labels.length; c++) {
+        // output[0][i][c] is the confidence score of c class
+        if (outputClassScores[0][i][c] > maxClassScore) {
+          labelIndex = c;
+          maxClassScore = outputClassScores[0][i][c];
+        }
+      }
+      // Prediction score
+      var score = maxClassScore;
+
+      var label;
+      if (labelIndex != -1) {
+        // Label string
+        label = labels.elementAt(labelIndex);
+        //print(label);
+      } else {
+        label = null;
+      }
+      // Makes sure the confidence is above the
+      // minimum threshold score for each object.
+      if (score > 0.3) {
+        // inverse of rect
+        // [locations] corresponds to the image size 300 X 300
+        // inverseTransformRect transforms it our [inputImage]
+
+        Rect rectAti = Rect.fromLTRB(
+            max(0, locations[i].left),
+            max(0, locations[i].top),
+            min(832 + 0.0, locations[i].right),
+            min(832 + 0.0, locations[i].bottom));
+
+        ImageProcessor imageProcessor = ImageProcessorBuilder()
+            .add(ResizeWithCropOrPadOp(1000, 1000))
+            .add(ResizeOp(832, 832, ResizeMethod.BILINEAR))
+            .build();
+
+        // Gets the coordinates based on the original image if anything was done to it.
+        Rect transformedRect = imageProcessor.inverseTransformRect(
+            rectAti, image.height, image.width);
+
+        recognitions.add(
+          Recognition(i, label, score, transformedRect),
+        );
+        print(recognitions);
+      }
+    } // End of for loop and added all recognitions
   }
 
   @override
