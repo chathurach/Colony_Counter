@@ -53,10 +53,11 @@ class _HomeState extends State<Home> {
       //int cropSize;
       ImageProcessor imageProcessor = ImageProcessorBuilder()
           .add(ResizeWithCropOrPadOp(
-            1000,
-            1000,
+            4000,
+            4000,
           ))
-          .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
+          .add(ResizeOp(
+              _inputShape[1], _inputShape[2], ResizeMethod.NEAREST_NEIGHBOUR))
           .build();
       _inputImage.loadImage(image);
       //cropSize = min(_inputImage.width, _inputImage.height);
@@ -73,6 +74,7 @@ class _HomeState extends State<Home> {
     try {
       interpreter = await tfl.Interpreter.fromAsset('yolov4-416.tflite');
       labels = await FileUtil.loadLabels('assets/labels.txt');
+      print(labels);
       _inputShape = interpreter.getInputTensor(0).shape;
       _inputType = interpreter.getInputTensor(0).type;
       print(_inputType);
@@ -126,16 +128,27 @@ class _HomeState extends State<Home> {
       height: 832,
       width: 832,
     );
-    print(locations[1].topLeft);
-    print(locations[2].topLeft);
-    print(locations[3].topLeft);
-    print(locations[4].topLeft);
-    print(locations[5].topLeft);
-    print(locations[6].topLeft);
-    print(locations[7].topLeft);
-    print(locations[8].topLeft);
-    print(locations[9].topLeft);
-    print(locations[10].topLeft);
+    //print(_outputShape[0][1]);
+    // print(locations[1]);
+    //print(outputClassScores[0][1][0]);
+    // print(locations[2]);
+    // print(outputClassScores[2]);
+    // print(locations[3]);
+    // print(outputClassScores[3]);
+    // print(locations[4]);
+    // print(outputClassScores[4]);
+    // print(locations[5]);
+    // print(outputClassScores[5]);
+    // print(locations[6]);
+    // print(outputClassScores[6]);
+    // print(locations[7]);
+    // print(outputClassScores[7]);
+    // print(locations[8]);
+    // print(outputClassScores[8]);
+    // print(locations[9]);
+    // print(outputClassScores[9]);
+    // print(locations[10]);
+    // print(outputClassScores[10]);
 
     List<Recognition> recognitions = [];
 
@@ -146,7 +159,6 @@ class _HomeState extends State<Home> {
       // Since we are given a list of scores for each class for
       // each detected Object, we are interested in finding the class
       // with the highest output score
-
       var maxClassScore = 0.00;
       var labelIndex = -1;
 
@@ -155,6 +167,7 @@ class _HomeState extends State<Home> {
         if (outputClassScores[0][i][c] > maxClassScore) {
           labelIndex = c;
           maxClassScore = outputClassScores[0][i][c];
+          print(maxClassScore);
         }
       }
       // Prediction score
