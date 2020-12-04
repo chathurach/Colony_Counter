@@ -32,6 +32,8 @@ class _HomeState extends State<Home> {
   List<tfl.TfLiteType> _outputType;
   tfl.TfLiteType _inputType;
   img.Image _image;
+  int _imageWidth;
+  int _imageHeight;
   //TensorBuffer _outputBuffer;
 
   Future getImage() async {
@@ -39,7 +41,10 @@ class _HomeState extends State<Home> {
       source: ImageSource.gallery,
     );
     //final File file = File(pickedImage.path);
+
     _image = img.decodeImage(File(pickedImage.path).readAsBytesSync());
+    _imageWidth = _image.width;
+    _imageHeight = _image.height;
 
     //final File file = File(pickedImage.path);
     // setState(() {
@@ -50,14 +55,14 @@ class _HomeState extends State<Home> {
 
   Future imageResize(var image) async {
     try {
-      //int cropSize;
+      int cropSize = min(_imageHeight, _imageWidth);
+      print(cropSize);
       ImageProcessor imageProcessor = ImageProcessorBuilder()
           .add(ResizeWithCropOrPadOp(
-            4000,
-            4000,
+            cropSize,
+            cropSize,
           ))
-          .add(ResizeOp(
-              _inputShape[1], _inputShape[2], ResizeMethod.NEAREST_NEIGHBOUR))
+          .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
           .build();
       _inputImage.loadImage(image);
       //cropSize = min(_inputImage.width, _inputImage.height);
@@ -72,24 +77,28 @@ class _HomeState extends State<Home> {
 
   Future loadModel() async {
     try {
-      interpreter = await tfl.Interpreter.fromAsset('yolov4-416.tflite');
+      interpreter = await tfl.Interpreter.fromAsset(
+        'yolov4-416.tflite',
+        options: tfl.InterpreterOptions()..threads = 4,
+      );
       labels = await FileUtil.loadLabels('assets/labels.txt');
-      print(labels);
+      //print(labels);
       _inputShape = interpreter.getInputTensor(0).shape;
       _inputType = interpreter.getInputTensor(0).type;
-      print(_inputType);
+      //print(_inputType);
       // _outputShape = interpreter.getOutputTensor(0).shape;
       // _outputType = interpreter.getOutputTensor(0).type;
+      //detected_classes = interpreter.get_tensor(output_details[1]['index'])
       var _outputTensors = interpreter.getOutputTensors();
       _outputShape = [];
       _outputType = [];
-      _outputTensors.forEach((element) {
-        _outputShape.add(element.shape);
-        _outputType.add(element.type);
+      _outputTensors.forEach((tfl.Tensor tensor) {
+        _outputShape.add(tensor.shape);
+        _outputType.add(tensor.type);
       });
       //_outputBuffer = TensorBuffer.createFixedSize(_outputShape, _outputType);
       print(_inputShape);
-      print(_outputShape[0][2]);
+      //print(_outputTensors[1]);
       print('load model sucess!');
     } on Exception catch (e) {
       print('Error while loading the model: $e');
@@ -100,8 +109,10 @@ class _HomeState extends State<Home> {
     await loadModel();
     await imageResize(image);
     TensorBuffer outputLocations = TensorBufferFloat(_outputShape[0]);
+    //TensorBuffer outputClass = TensorBufferFloat(_outputShape[1]);
+    //TensorBuffer numLocations = TensorBufferFloat(_outputShape[3]);
 
-    List<List<List<double>>> outputClassScores = new List.generate(
+    List<List<List<double>>> outputClass = new List.generate(
         _outputShape[1][0],
         (_) => new List.generate(
             _outputShape[1][1], (_) => new List.filled(_outputShape[1][2], 0.0),
@@ -110,7 +121,9 @@ class _HomeState extends State<Home> {
 
     Map<int, Object> outputs = {
       0: outputLocations.buffer,
-      1: outputClassScores,
+      1: outputClass,
+      //2: outputScores.buffer,
+      // 3: numLocations.buffer,
     };
     List<Object> inputs = [_inputImage.buffer];
     // print(_inputImage.height);
@@ -118,6 +131,8 @@ class _HomeState extends State<Home> {
 
     interpreter.runForMultipleInputs(inputs, outputs);
     print('model ran');
+
+    //print(outputClass.getDoubleValue(8111));
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
@@ -128,27 +143,7 @@ class _HomeState extends State<Home> {
       height: 832,
       width: 832,
     );
-    //print(_outputShape[0][1]);
-    // print(locations[1]);
-    //print(outputClassScores[0][1][0]);
-    // print(locations[2]);
-    // print(outputClassScores[2]);
-    // print(locations[3]);
-    // print(outputClassScores[3]);
-    // print(locations[4]);
-    // print(outputClassScores[4]);
-    // print(locations[5]);
-    // print(outputClassScores[5]);
-    // print(locations[6]);
-    // print(outputClassScores[6]);
-    // print(locations[7]);
-    // print(outputClassScores[7]);
-    // print(locations[8]);
-    // print(outputClassScores[8]);
-    // print(locations[9]);
-    // print(outputClassScores[9]);
-    // print(locations[10]);
-    // print(outputClassScores[10]);
+    // print(locations[0]);
 
     List<Recognition> recognitions = [];
 
@@ -164,10 +159,12 @@ class _HomeState extends State<Home> {
 
       for (int c = 0; c < labels.length; c++) {
         // output[0][i][c] is the confidence score of c class
-        if (outputClassScores[0][i][c] > maxClassScore) {
+        if (outputClass[0][i][c] > maxClassScore) {
           labelIndex = c;
-          maxClassScore = outputClassScores[0][i][c];
+          maxClassScore = outputClass[0][i][c];
           print(maxClassScore);
+          print(locations[i]);
+          print(i);
         }
       }
       // Prediction score
