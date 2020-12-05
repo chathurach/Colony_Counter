@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
-//import 'package:object_detection/ui/camera_view_singleton.dart';
+import 'package:yolo_tflite/camera_view_singleton.dart';
 
 /// Represents the recognition output from the model
 class Recognition implements Comparable<Recognition> {
@@ -39,17 +39,18 @@ class Recognition implements Comparable<Recognition> {
     // ratioX = screenWidth / imageInputWidth
     // ratioY = ratioX if image fits screenWidth with aspectRatio = constant
 
-    double ratioX = 1.0;
+    double ratioX = CameraViewSingleton.ratio;
     double ratioY = ratioX;
 
-    double transLeft = max(0.1, location.left * ratioX);
-    double transTop = max(0.1, location.top * ratioY);
-    //double transWidth = min(
-    // location.width * ratioX, CameraViewSingleton.actualPreviewSize.width);
-    //double transHeight = min(
-    // location.height * ratioY, CameraViewSingleton.actualPreviewSize.height);
-    double transWidth = 832;
-    double transHeight = 832;
+    double transLeft = max(0.1,
+        CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
+    double transTop = max(0.1, location.right * ratioY);
+    double transWidth = min(
+        location.width * ratioX, CameraViewSingleton.actualPreviewSize.width);
+    double transHeight = min(
+        location.height * ratioY, CameraViewSingleton.actualPreviewSize.height);
+    // double transWidth = 832;
+    // double transHeight = 832;
 
     Rect transformedRect =
         Rect.fromLTWH(transLeft, transTop, transWidth, transHeight);

@@ -1,3 +1,7 @@
+//import 'dart:html';
+
+import 'dart:ffi';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -9,6 +13,9 @@ import 'package:image/image.dart' as img;
 //import 'package:collection/collection.dart';
 import 'package:yolo_tflite/recognition.dart';
 import 'dart:math';
+import 'package:yolo_tflite/box_widget.dart';
+import 'package:yolo_tflite/camera_view_singleton.dart';
+import 'package:collection/collection.dart';
 
 void main() => runApp(MaterialApp(
       home: Home(),
@@ -22,6 +29,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   final picker = ImagePicker();
+  List<Recognition> results;
   //bool _busy = false;
   tfl.Interpreter interpreter;
   List<String> labels;
@@ -31,9 +39,12 @@ class _HomeState extends State<Home> {
   List<List<int>> _outputShape;
   List<tfl.TfLiteType> _outputType;
   tfl.TfLiteType _inputType;
-  img.Image _image;
+  File _image;
   int _imageWidth;
   int _imageHeight;
+  Image _imageWidget;
+  img.Image imageInput;
+
   //TensorBuffer _outputBuffer;
 
   Future getImage() async {
@@ -42,33 +53,50 @@ class _HomeState extends State<Home> {
     );
     //final File file = File(pickedImage.path);
 
-    _image = img.decodeImage(File(pickedImage.path).readAsBytesSync());
-    _imageWidth = _image.width;
-    _imageHeight = _image.height;
+    _image = File(pickedImage.path);
+    _imageWidget = Image.file(_image);
+    imageInput = img.decodeImage(_image.readAsBytesSync());
+    _imageWidth = 3464;
+    _imageHeight = 4618;
+    print(_imageWidget);
+    print(_imageHeight);
+    Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
+    CameraViewSingleton.inputImageSize = imageSize;
+    double ratio = imageSize.width / imageSize.height;
+    double scWidth = MediaQuery.of(context).size.width;
+    double scHeigth = scWidth / ratio;
+    Size screenSize = Size(scWidth, scHeigth);
+    CameraViewSingleton.screenSize = screenSize;
+    CameraViewSingleton.ratio = screenSize.width / imageSize.width;
+    print(_imageWidget);
+    print(_imageHeight);
+    print(scWidth);
+    print(scHeigth);
+    print(ratio);
 
     //final File file = File(pickedImage.path);
     // setState(() {
     //   _busy = true;
     // });
-    predict(_image);
+    predict(imageInput);
   }
 
-  Future imageResize(var image) async {
+  Future imageResize(img.Image image) async {
     try {
-      int cropSize = min(_imageHeight, _imageWidth);
+      int cropSize = min(4618, 3464);
       print(cropSize);
+      //_inputImage = TensorImage.fromImage(image);
       ImageProcessor imageProcessor = ImageProcessorBuilder()
           .add(ResizeWithCropOrPadOp(
             cropSize,
             cropSize,
           ))
           .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
+          .add(NormalizeOp(127, 127))
           .build();
       _inputImage.loadImage(image);
       //cropSize = min(_inputImage.width, _inputImage.height);
       _inputImage = imageProcessor.process(_inputImage);
-      print(_inputImage.height);
-      print(_inputImage.width);
     } on Exception catch (e) {
       print('failed to resize the image: $e');
     }
@@ -97,7 +125,7 @@ class _HomeState extends State<Home> {
         _outputType.add(tensor.type);
       });
       //_outputBuffer = TensorBuffer.createFixedSize(_outputShape, _outputType);
-      print(_inputShape);
+      //print(_inputShape);
       //print(_outputTensors[1]);
       print('load model sucess!');
     } on Exception catch (e) {
@@ -105,7 +133,76 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future predict(var image) async {
+  List<Recognition> nms(
+      List<Recognition> list) // Turned from Java's ArrayList to Dart's List.
+  {
+    List<Recognition> nmsList = new List<Recognition>();
+
+    for (int k = 0; k < labels.length; k++) {
+      // 1.find max confidence per class
+      PriorityQueue<Recognition> pq = new HeapPriorityQueue<Recognition>();
+      for (int i = 0; i < list.length; ++i) {
+        if (list[i].label == labels[k]) {
+          // Changed from comparing #th class to class to string to string
+          pq.add(list[i]);
+        }
+      }
+
+      // 2.do non maximum suppression
+      while (pq.length > 0) {
+        // insert detection with max confidence
+        List<Recognition> detections = pq.toList(); //In Java: pq.toArray(a)
+        Recognition max = detections[0];
+        nmsList.add(max);
+        pq.clear();
+        for (int j = 1; j < detections.length; j++) {
+          Recognition detection = detections[j];
+          Rect b = detection.location;
+          if (boxIou(max.location, b) < 0.6) {
+            pq.add(detection);
+          }
+        }
+      }
+    }
+
+    return nmsList;
+  }
+
+  double boxIou(Rect a, Rect b) {
+    return boxIntersection(a, b) / boxUnion(a, b);
+  }
+
+  double boxIntersection(Rect a, Rect b) {
+    double w = overlap((a.left + a.right) / 2, a.right - a.left,
+        (b.left + b.right) / 2, b.right - b.left);
+    double h = overlap((a.top + a.bottom) / 2, a.bottom - a.top,
+        (b.top + b.bottom) / 2, b.bottom - b.top);
+    if ((w < 0) || (h < 0)) {
+      return 0;
+    }
+    double area = (w * h);
+    return area;
+  }
+
+  double boxUnion(Rect a, Rect b) {
+    double i = boxIntersection(a, b);
+    double u = ((((a.right - a.left) * (a.bottom - a.top)) +
+            ((b.right - b.left) * (b.bottom - b.top))) -
+        i);
+    return u;
+  }
+
+  double overlap(double x1, double w1, double x2, double w2) {
+    double l1 = (x1 - (w1 / 2));
+    double l2 = (x2 - (w2 / 2));
+    double left = ((l1 > l2) ? l1 : l2);
+    double r1 = (x1 + (w1 / 2));
+    double r2 = (x2 + (w2 / 2));
+    double right = ((r1 < r2) ? r1 : r2);
+    return right - left;
+  }
+
+  Future predict(img.Image image) async {
     await loadModel();
     await imageResize(image);
     TensorBuffer outputLocations = TensorBufferFloat(_outputShape[0]);
@@ -136,7 +233,7 @@ class _HomeState extends State<Home> {
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
-      //valueIndex: [1, 0, 3, 2], Commented out because default order is needed.
+      //valueIndex: [1, 0, 3, 2],
       boundingBoxAxis: 2,
       boundingBoxType: BoundingBoxType.CENTER,
       coordinateType: CoordinateType.PIXEL,
@@ -162,9 +259,9 @@ class _HomeState extends State<Home> {
         if (outputClass[0][i][c] > maxClassScore) {
           labelIndex = c;
           maxClassScore = outputClass[0][i][c];
-          print(maxClassScore);
-          print(locations[i]);
-          print(i);
+          // print(maxClassScore);
+          // print(locations[i]);
+          // print(i);
         }
       }
       // Prediction score
@@ -181,6 +278,9 @@ class _HomeState extends State<Home> {
       // Makes sure the confidence is above the
       // minimum threshold score for each object.
       if (score > 0.3) {
+        // print(maxClassScore);
+        // print(locations[i]);
+        // print(i);
         // inverse of rect
         // [locations] corresponds to the image size 300 X 300
         // inverseTransformRect transforms it our [inputImage]
@@ -191,19 +291,33 @@ class _HomeState extends State<Home> {
             min(832 + 0.0, locations[i].right),
             min(832 + 0.0, locations[i].bottom));
 
+        int cropSize = min(4618, 3464);
+        //print(cropSize);
+        //_inputImage = TensorImage.fromImage(image);
         ImageProcessor imageProcessor = ImageProcessorBuilder()
-            .add(ResizeWithCropOrPadOp(1000, 1000))
-            .add(ResizeOp(832, 832, ResizeMethod.BILINEAR))
+            .add(ResizeWithCropOrPadOp(
+              cropSize,
+              cropSize,
+            ))
+            .add(
+                ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
+            .add(NormalizeOp(127, 127))
             .build();
 
         // Gets the coordinates based on the original image if anything was done to it.
-        Rect transformedRect = imageProcessor.inverseTransformRect(
-            rectAti, image.height, image.width);
+        Rect transformedRect =
+            imageProcessor.inverseTransformRect(rectAti, 3464, 4618);
 
         recognitions.add(
           Recognition(i, label, score, transformedRect),
         );
-        print(recognitions);
+
+        setState(() {
+          results = nms(recognitions);
+          print(results[0].renderLocation.width);
+          print(results[0].renderLocation.height);
+        });
+        //print(recognitions);
       }
     } // End of for loop and added all recognitions
   }
@@ -216,22 +330,16 @@ class _HomeState extends State<Home> {
           child: Text('Colony Count'),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: <Widget>[
-            Container(
-              padding: EdgeInsets.all(20.0),
-              // child: _image == null
-              //     ? Text('No image to show!')
-              //     : Image.file(_image),
-            ),
-            new RaisedButton(
-              onPressed: () {},
-              child: Text('Save'),
-            )
-          ],
-        ),
-      ),
+      body: imageShow(context),
+      // child: Column(
+      //   children: <Widget>[
+      //     Container(
+      //       padding: EdgeInsets.all(20.0),
+      //       child: imageShow(context),
+      //     ),
+      //   ],
+      // ),
+      //),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           getImage();
@@ -240,5 +348,34 @@ class _HomeState extends State<Home> {
         child: Icon(Icons.add_a_photo),
       ),
     );
+  }
+
+  /// Returns Stack of bounding boxes
+  Widget boundingBoxes(List<Recognition> results) {
+    if (results == null) {
+      return Container();
+    }
+    return Stack(
+      children: results
+          .map((e) => BoxWidget(
+                result: e,
+              ))
+          .toList(),
+    );
+  }
+
+  Widget imageShow(BuildContext context) {
+    Widget child;
+    if (_imageWidget != null) {
+      child = Stack(
+        children: <Widget>[
+          _imageWidget,
+          boundingBoxes(results),
+        ],
+      );
+    } else {
+      child = Text('No Image!');
+    }
+    return new Container(child: child);
   }
 }
