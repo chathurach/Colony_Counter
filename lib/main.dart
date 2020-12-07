@@ -55,21 +55,23 @@ class _HomeState extends State<Home> {
     _image = File(pickedImage.path);
     _imageWidget = Image.file(_image);
     imageInput = img.decodeImage(_image.readAsBytesSync());
-    _imageWidth = imageInput.height.toDouble();
-    _imageHeight = imageInput.width.toDouble();
+    _imageWidth = imageInput.width.toDouble();
+    _imageHeight = imageInput.height.toDouble();
     Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
     CameraViewSingleton.inputImageSize = imageSize;
     double ratio = imageSize.width / imageSize.height;
     double scWidth = MediaQuery.of(context).size.width;
-    double scHeigth = scWidth / ratio;
+    double scHeigth = scWidth * ratio;
     Size screenSize = Size(scWidth, scHeigth);
     CameraViewSingleton.screenSize = screenSize;
-    CameraViewSingleton.ratio = screenSize.width / imageSize.width;
-    print(_imageWidth);
-    print(_imageHeight);
-    print(scWidth);
-    print(scHeigth);
-    print(ratio);
+    CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
+    CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
+
+    // print(_imageWidth);
+    // print(_imageHeight);
+    // print(scWidth);
+    // print(scHeigth);
+    // print(ratio);
 
     //final File file = File(pickedImage.path);
     // setState(() {
@@ -81,7 +83,7 @@ class _HomeState extends State<Home> {
   Future imageResize(img.Image image) async {
     try {
       int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
-      print(cropSize);
+      //print(cropSize);
       //_inputImage = TensorImage.fromImage(image);
       ImageProcessor imageProcessor = ImageProcessorBuilder()
           .add(ResizeWithCropOrPadOp(
@@ -119,7 +121,7 @@ class _HomeState extends State<Home> {
         _outputType.add(tensor.type);
       });
 
-      print('load model sucess!');
+      //print('load model sucess!');
     } on Exception catch (e) {
       print('Error while loading the model: $e');
     }
@@ -213,7 +215,7 @@ class _HomeState extends State<Home> {
     List<Object> inputs = [_inputImage.buffer];
 
     interpreter.runForMultipleInputs(inputs, outputs);
-    print('model ran');
+    //print('model ran');
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
@@ -257,7 +259,7 @@ class _HomeState extends State<Home> {
       }
       // Makes sure the confidence is above the
       // minimum threshold score for each object.
-      if (score > 0.3) {
+      if (score > 0.4) {
         // inverse of rect
         // [locations] corresponds to the image size 300 X 300
         // inverseTransformRect transforms it our [inputImage]
@@ -291,13 +293,19 @@ class _HomeState extends State<Home> {
         recognitions.add(
           Recognition(i, label, score, transformedRect),
         );
-
-        setState(() {
-          results = nms(recognitions);
-        });
+        // print(i);
+        // print(score);
+        // print(transformedRect);
         //print(recognitions);
       }
-    } // End of for loop and added all recognitions
+    }
+    // End of for loop and added all recognitions
+
+    setState(() {
+      results = nms(recognitions);
+      // _busy = false;
+      //results = recognitions;
+    });
   }
 
   @override
@@ -337,13 +345,38 @@ class _HomeState extends State<Home> {
     Widget child;
     if (_imageWidget != null) {
       child = Stack(
+        //fit: StackFit.expand,
         children: <Widget>[
           _imageWidget,
           boundingBoxes(results),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              height: MediaQuery.of(context).size.height / 4,
+              width: MediaQuery.of(context).size.width,
+              child: Center(
+                child: Text(
+                  "Colony Count - " + results.length.toString(),
+                  textScaleFactor: 1.5,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              color: Colors.white,
+            ),
+          ),
         ],
       );
     } else {
-      child = Text('No Image!');
+      child = Center(
+          child: Text(
+        'Select an image!',
+        textScaleFactor: 1.5,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+        ),
+      ));
     }
     return new Container(child: child);
   }

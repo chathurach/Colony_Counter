@@ -32,10 +32,10 @@ class BoxWidget extends StatelessWidget {
               color: color,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                // children: <Widget>[
-                //   Text(result.label),
-                //   Text(" " + result.score.toStringAsFixed(2)),
-                // ],
+                children: <Widget>[
+                  Text(result.label),
+                  Text(" " + result.score.toStringAsFixed(2)),
+                ],
               ),
             ),
           ),

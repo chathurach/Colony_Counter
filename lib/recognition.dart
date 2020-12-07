@@ -39,11 +39,12 @@ class Recognition implements Comparable<Recognition> {
     // ratioX = screenWidth / imageInputWidth
     // ratioY = ratioX if image fits screenWidth with aspectRatio = constant
 
-    double ratioX = CameraViewSingleton.ratio;
+    double ratioX = CameraViewSingleton.ratioX;
     double ratioY = ratioX;
 
-    double transLeft = max(0.1, location.bottom * ratioX);
-    double transTop = max(0.1, location.right * ratioY);
+    double transLeft = max(0.1,
+        CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
+    double transTop = max(0.1, (location.right * ratioY) - 17.0);
     double transWidth = min(
         location.width * ratioX, CameraViewSingleton.actualPreviewSize.width);
     double transHeight = min(
@@ -53,9 +54,9 @@ class Recognition implements Comparable<Recognition> {
 
     Rect transformedRect =
         Rect.fromLTWH(transLeft, transTop, transWidth, transHeight);
-    print(transformedRect);
-    print(
-        CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
+    // print(transformedRect);
+    // print(
+    //     CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
     return transformedRect;
   }
 
