@@ -30,18 +30,16 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   final picker = ImagePicker();
   List<Recognition> results;
-  //bool _busy = false;
   tfl.Interpreter interpreter;
   List<String> labels;
-  //List<int> _imageShape = [1, 832, 832, 3];
   TensorImage _inputImage = TensorImage(tfl.TfLiteType.float32);
   List<int> _inputShape;
   List<List<int>> _outputShape;
   List<tfl.TfLiteType> _outputType;
-  tfl.TfLiteType _inputType;
+  //tfl.TfLiteType _inputType;
   File _image;
-  int _imageWidth;
-  int _imageHeight;
+  double _imageWidth;
+  double _imageHeight;
   Image _imageWidget;
   img.Image imageInput;
 
@@ -50,16 +48,15 @@ class _HomeState extends State<Home> {
   Future getImage() async {
     var pickedImage = await picker.getImage(
       source: ImageSource.gallery,
+      imageQuality: 100,
     );
     //final File file = File(pickedImage.path);
 
     _image = File(pickedImage.path);
     _imageWidget = Image.file(_image);
     imageInput = img.decodeImage(_image.readAsBytesSync());
-    _imageWidth = 3464;
-    _imageHeight = 4618;
-    print(_imageWidget);
-    print(_imageHeight);
+    _imageWidth = imageInput.height.toDouble();
+    _imageHeight = imageInput.width.toDouble();
     Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
     CameraViewSingleton.inputImageSize = imageSize;
     double ratio = imageSize.width / imageSize.height;
@@ -68,7 +65,7 @@ class _HomeState extends State<Home> {
     Size screenSize = Size(scWidth, scHeigth);
     CameraViewSingleton.screenSize = screenSize;
     CameraViewSingleton.ratio = screenSize.width / imageSize.width;
-    print(_imageWidget);
+    print(_imageWidth);
     print(_imageHeight);
     print(scWidth);
     print(scHeigth);
@@ -83,7 +80,7 @@ class _HomeState extends State<Home> {
 
   Future imageResize(img.Image image) async {
     try {
-      int cropSize = min(4618, 3464);
+      int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
       print(cropSize);
       //_inputImage = TensorImage.fromImage(image);
       ImageProcessor imageProcessor = ImageProcessorBuilder()
@@ -110,13 +107,10 @@ class _HomeState extends State<Home> {
         options: tfl.InterpreterOptions()..threads = 4,
       );
       labels = await FileUtil.loadLabels('assets/labels.txt');
-      //print(labels);
+
       _inputShape = interpreter.getInputTensor(0).shape;
-      _inputType = interpreter.getInputTensor(0).type;
-      //print(_inputType);
-      // _outputShape = interpreter.getOutputTensor(0).shape;
-      // _outputType = interpreter.getOutputTensor(0).type;
-      //detected_classes = interpreter.get_tensor(output_details[1]['index'])
+      //_inputType = interpreter.getInputTensor(0).type;
+
       var _outputTensors = interpreter.getOutputTensors();
       _outputShape = [];
       _outputType = [];
@@ -124,9 +118,7 @@ class _HomeState extends State<Home> {
         _outputShape.add(tensor.shape);
         _outputType.add(tensor.type);
       });
-      //_outputBuffer = TensorBuffer.createFixedSize(_outputShape, _outputType);
-      //print(_inputShape);
-      //print(_outputTensors[1]);
+
       print('load model sucess!');
     } on Exception catch (e) {
       print('Error while loading the model: $e');
@@ -206,8 +198,6 @@ class _HomeState extends State<Home> {
     await loadModel();
     await imageResize(image);
     TensorBuffer outputLocations = TensorBufferFloat(_outputShape[0]);
-    //TensorBuffer outputClass = TensorBufferFloat(_outputShape[1]);
-    //TensorBuffer numLocations = TensorBufferFloat(_outputShape[3]);
 
     List<List<List<double>>> outputClass = new List.generate(
         _outputShape[1][0],
@@ -219,17 +209,11 @@ class _HomeState extends State<Home> {
     Map<int, Object> outputs = {
       0: outputLocations.buffer,
       1: outputClass,
-      //2: outputScores.buffer,
-      // 3: numLocations.buffer,
     };
     List<Object> inputs = [_inputImage.buffer];
-    // print(_inputImage.height);
-    // print(_inputImage.width);
 
     interpreter.runForMultipleInputs(inputs, outputs);
     print('model ran');
-
-    //print(outputClass.getDoubleValue(8111));
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
@@ -240,7 +224,6 @@ class _HomeState extends State<Home> {
       height: 832,
       width: 832,
     );
-    // print(locations[0]);
 
     List<Recognition> recognitions = [];
 
@@ -259,9 +242,6 @@ class _HomeState extends State<Home> {
         if (outputClass[0][i][c] > maxClassScore) {
           labelIndex = c;
           maxClassScore = outputClass[0][i][c];
-          // print(maxClassScore);
-          // print(locations[i]);
-          // print(i);
         }
       }
       // Prediction score
@@ -278,9 +258,6 @@ class _HomeState extends State<Home> {
       // Makes sure the confidence is above the
       // minimum threshold score for each object.
       if (score > 0.3) {
-        // print(maxClassScore);
-        // print(locations[i]);
-        // print(i);
         // inverse of rect
         // [locations] corresponds to the image size 300 X 300
         // inverseTransformRect transforms it our [inputImage]
@@ -291,7 +268,7 @@ class _HomeState extends State<Home> {
             min(832 + 0.0, locations[i].right),
             min(832 + 0.0, locations[i].bottom));
 
-        int cropSize = min(4618, 3464);
+        int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
         //print(cropSize);
         //_inputImage = TensorImage.fromImage(image);
         ImageProcessor imageProcessor = ImageProcessorBuilder()
@@ -305,8 +282,11 @@ class _HomeState extends State<Home> {
             .build();
 
         // Gets the coordinates based on the original image if anything was done to it.
-        Rect transformedRect =
-            imageProcessor.inverseTransformRect(rectAti, 3464, 4618);
+        Rect transformedRect = imageProcessor.inverseTransformRect(
+          rectAti,
+          _imageHeight.toInt(),
+          _imageWidth.toInt(),
+        );
 
         recognitions.add(
           Recognition(i, label, score, transformedRect),
@@ -314,8 +294,6 @@ class _HomeState extends State<Home> {
 
         setState(() {
           results = nms(recognitions);
-          print(results[0].renderLocation.width);
-          print(results[0].renderLocation.height);
         });
         //print(recognitions);
       }
@@ -331,15 +309,6 @@ class _HomeState extends State<Home> {
         ),
       ),
       body: imageShow(context),
-      // child: Column(
-      //   children: <Widget>[
-      //     Container(
-      //       padding: EdgeInsets.all(20.0),
-      //       child: imageShow(context),
-      //     ),
-      //   ],
-      // ),
-      //),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           getImage();
