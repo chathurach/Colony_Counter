@@ -1,21 +1,16 @@
-//import 'dart:html';
-
-import 'dart:ffi';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-//import 'package:image_picker/image_picker.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
 import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
 import 'package:image/image.dart' as img;
-//import 'dart:math';
-//import 'package:collection/collection.dart';
 import 'package:yolo_tflite/recognition.dart';
 import 'dart:math';
 import 'package:yolo_tflite/box_widget.dart';
 import 'package:yolo_tflite/camera_view_singleton.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/services.dart';
+import 'package:loading_overlay/loading_overlay.dart';
 
 void main() => runApp(MaterialApp(
       home: Home(),
@@ -42,13 +37,15 @@ class _HomeState extends State<Home> {
   double _imageHeight;
   Image _imageWidget;
   img.Image imageInput;
+  bool _busy = false;
 
   //TensorBuffer _outputBuffer;
 
   Future getImage() async {
     var pickedImage = await picker.getImage(
-      source: ImageSource.gallery,
-      imageQuality: 100,
+      source: ImageSource.camera,
+      maxWidth: 2000,
+      maxHeight: 2000,
     );
     //final File file = File(pickedImage.path);
 
@@ -66,17 +63,9 @@ class _HomeState extends State<Home> {
     CameraViewSingleton.screenSize = screenSize;
     CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
     CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
+    _busy = true;
+    setState(() {});
 
-    // print(_imageWidth);
-    // print(_imageHeight);
-    // print(scWidth);
-    // print(scHeigth);
-    // print(ratio);
-
-    //final File file = File(pickedImage.path);
-    // setState(() {
-    //   _busy = true;
-    // });
     predict(imageInput);
   }
 
@@ -223,8 +212,8 @@ class _HomeState extends State<Home> {
       boundingBoxAxis: 2,
       boundingBoxType: BoundingBoxType.CENTER,
       coordinateType: CoordinateType.PIXEL,
-      height: 832,
-      width: 832,
+      height: 1024,
+      width: 1024,
     );
 
     List<Recognition> recognitions = [];
@@ -267,8 +256,8 @@ class _HomeState extends State<Home> {
         Rect rectAti = Rect.fromLTRB(
             max(0, locations[i].left),
             max(0, locations[i].top),
-            min(832 + 0.0, locations[i].right),
-            min(832 + 0.0, locations[i].bottom));
+            min(1024 + 0.0, locations[i].right),
+            min(1024 + 0.0, locations[i].bottom));
 
         int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
         //print(cropSize);
@@ -293,30 +282,30 @@ class _HomeState extends State<Home> {
         recognitions.add(
           Recognition(i, label, score, transformedRect),
         );
-        // print(i);
-        // print(score);
-        // print(transformedRect);
-        //print(recognitions);
       }
     }
     // End of for loop and added all recognitions
-
+    _busy = false;
     setState(() {
       results = nms(recognitions);
-      // _busy = false;
-      //results = recognitions;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     return Scaffold(
       appBar: AppBar(
         title: Center(
           child: Text('Colony Count'),
         ),
       ),
-      body: imageShow(context),
+      body: LoadingOverlay(
+        isLoading: _busy,
+        opacity: 0.5,
+        child: imageShow(context),
+        progressIndicator: CircularProgressIndicator(),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           getImage();
@@ -343,9 +332,8 @@ class _HomeState extends State<Home> {
 
   Widget imageShow(BuildContext context) {
     Widget child;
-    if (_imageWidget != null) {
+    if (_imageWidget != null && _busy == false) {
       child = Stack(
-        //fit: StackFit.expand,
         children: <Widget>[
           _imageWidget,
           boundingBoxes(results),

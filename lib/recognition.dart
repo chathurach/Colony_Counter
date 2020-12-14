@@ -30,15 +30,7 @@ class Recognition implements Comparable<Recognition> {
 
   Rect get location => _location;
 
-  /// Returns bounding box rectangle corresponding to the
-  /// displayed image on screen
-  ///
-  /// This is the actual location where rectangle is rendered on
-  /// the screen
   Rect get renderLocation {
-    // ratioX = screenWidth / imageInputWidth
-    // ratioY = ratioX if image fits screenWidth with aspectRatio = constant
-
     double ratioX = CameraViewSingleton.ratioX;
     double ratioY = ratioX;
 
@@ -49,14 +41,10 @@ class Recognition implements Comparable<Recognition> {
         location.width * ratioX, CameraViewSingleton.actualPreviewSize.width);
     double transHeight = min(
         location.height * ratioY, CameraViewSingleton.actualPreviewSize.height);
-    // double transWidth = 832;
-    // double transHeight = 832;
 
     Rect transformedRect =
         Rect.fromLTWH(transLeft, transTop, transWidth, transHeight);
-    // print(transformedRect);
-    // print(
-    //     CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
+
     return transformedRect;
   }
 
