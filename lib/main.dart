@@ -8,9 +8,9 @@ import 'package:yolo_tflite/recognition.dart';
 import 'dart:math';
 import 'package:yolo_tflite/box_widget.dart';
 import 'package:yolo_tflite/camera_view_singleton.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
 import 'package:loading_overlay/loading_overlay.dart';
+import 'package:yolo_tflite/nms.dart';
 
 void main() => runApp(MaterialApp(
       home: Home(),
@@ -31,23 +31,22 @@ class _HomeState extends State<Home> {
   List<int> _inputShape;
   List<List<int>> _outputShape;
   List<tfl.TfLiteType> _outputType;
-  //tfl.TfLiteType _inputType;
   File _image;
   double _imageWidth;
   double _imageHeight;
   Image _imageWidget;
   img.Image imageInput;
   bool _busy = false;
-
-  //TensorBuffer _outputBuffer;
+  int inputSize = 1024; //input image size for the tflite model
+  double normalMean = 150.0;
+  double normalStd = 150.0;
 
   Future getImage() async {
     var pickedImage = await picker.getImage(
-      source: ImageSource.camera,
-      maxWidth: 2000,
-      maxHeight: 2000,
+      source: ImageSource.gallery,
+      maxWidth: 1500,
+      maxHeight: 1500,
     );
-    //final File file = File(pickedImage.path);
 
     _image = File(pickedImage.path);
     _imageWidget = Image.file(_image);
@@ -63,8 +62,6 @@ class _HomeState extends State<Home> {
     CameraViewSingleton.screenSize = screenSize;
     CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
     CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
-    _busy = true;
-    setState(() {});
 
     predict(imageInput);
   }
@@ -80,7 +77,7 @@ class _HomeState extends State<Home> {
             cropSize,
           ))
           .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
-          .add(NormalizeOp(127, 127))
+          .add(NormalizeOp(normalMean, normalStd))
           .build();
       _inputImage.loadImage(image);
       //cropSize = min(_inputImage.width, _inputImage.height);
@@ -116,75 +113,6 @@ class _HomeState extends State<Home> {
     }
   }
 
-  List<Recognition> nms(
-      List<Recognition> list) // Turned from Java's ArrayList to Dart's List.
-  {
-    List<Recognition> nmsList = new List<Recognition>();
-
-    for (int k = 0; k < labels.length; k++) {
-      // 1.find max confidence per class
-      PriorityQueue<Recognition> pq = new HeapPriorityQueue<Recognition>();
-      for (int i = 0; i < list.length; ++i) {
-        if (list[i].label == labels[k]) {
-          // Changed from comparing #th class to class to string to string
-          pq.add(list[i]);
-        }
-      }
-
-      // 2.do non maximum suppression
-      while (pq.length > 0) {
-        // insert detection with max confidence
-        List<Recognition> detections = pq.toList(); //In Java: pq.toArray(a)
-        Recognition max = detections[0];
-        nmsList.add(max);
-        pq.clear();
-        for (int j = 1; j < detections.length; j++) {
-          Recognition detection = detections[j];
-          Rect b = detection.location;
-          if (boxIou(max.location, b) < 0.6) {
-            pq.add(detection);
-          }
-        }
-      }
-    }
-
-    return nmsList;
-  }
-
-  double boxIou(Rect a, Rect b) {
-    return boxIntersection(a, b) / boxUnion(a, b);
-  }
-
-  double boxIntersection(Rect a, Rect b) {
-    double w = overlap((a.left + a.right) / 2, a.right - a.left,
-        (b.left + b.right) / 2, b.right - b.left);
-    double h = overlap((a.top + a.bottom) / 2, a.bottom - a.top,
-        (b.top + b.bottom) / 2, b.bottom - b.top);
-    if ((w < 0) || (h < 0)) {
-      return 0;
-    }
-    double area = (w * h);
-    return area;
-  }
-
-  double boxUnion(Rect a, Rect b) {
-    double i = boxIntersection(a, b);
-    double u = ((((a.right - a.left) * (a.bottom - a.top)) +
-            ((b.right - b.left) * (b.bottom - b.top))) -
-        i);
-    return u;
-  }
-
-  double overlap(double x1, double w1, double x2, double w2) {
-    double l1 = (x1 - (w1 / 2));
-    double l2 = (x2 - (w2 / 2));
-    double left = ((l1 > l2) ? l1 : l2);
-    double r1 = (x1 + (w1 / 2));
-    double r2 = (x2 + (w2 / 2));
-    double right = ((r1 < r2) ? r1 : r2);
-    return right - left;
-  }
-
   Future predict(img.Image image) async {
     await loadModel();
     await imageResize(image);
@@ -208,12 +136,11 @@ class _HomeState extends State<Home> {
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
-      //valueIndex: [1, 0, 3, 2],
       boundingBoxAxis: 2,
       boundingBoxType: BoundingBoxType.CENTER,
       coordinateType: CoordinateType.PIXEL,
-      height: 1024,
-      width: 1024,
+      height: inputSize,
+      width: inputSize,
     );
 
     List<Recognition> recognitions = [];
@@ -250,14 +177,14 @@ class _HomeState extends State<Home> {
       // minimum threshold score for each object.
       if (score > 0.4) {
         // inverse of rect
-        // [locations] corresponds to the image size 300 X 300
+        // [locations] corresponds to the inputSize
         // inverseTransformRect transforms it our [inputImage]
 
         Rect rectAti = Rect.fromLTRB(
             max(0, locations[i].left),
             max(0, locations[i].top),
-            min(1024 + 0.0, locations[i].right),
-            min(1024 + 0.0, locations[i].bottom));
+            min(inputSize + 0.0, locations[i].right),
+            min(inputSize + 0.0, locations[i].bottom));
 
         int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
         //print(cropSize);
@@ -269,7 +196,7 @@ class _HomeState extends State<Home> {
             ))
             .add(
                 ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
-            .add(NormalizeOp(127, 127))
+            .add(NormalizeOp(normalMean, normalStd))
             .build();
 
         // Gets the coordinates based on the original image if anything was done to it.
@@ -287,7 +214,8 @@ class _HomeState extends State<Home> {
     // End of for loop and added all recognitions
     _busy = false;
     setState(() {
-      results = nms(recognitions);
+      results = nms(recognitions,
+          labels); //Get the optimum bounding boxes from the prediction
     });
   }
 
@@ -302,12 +230,16 @@ class _HomeState extends State<Home> {
       ),
       body: LoadingOverlay(
         isLoading: _busy,
-        opacity: 0.5,
+        opacity: 1.0,
+        color: Colors.white,
         child: imageShow(context),
         progressIndicator: CircularProgressIndicator(),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          setState(() {
+            _busy = true;
+          });
           getImage();
         },
         tooltip: 'Pick Image',
@@ -359,13 +291,14 @@ class _HomeState extends State<Home> {
     } else {
       child = Center(
           child: Text(
-        'Select an image!',
+        'Take a picture!',
         textScaleFactor: 1.5,
         style: TextStyle(
           fontWeight: FontWeight.bold,
         ),
       ));
     }
+
     return new Container(child: child);
   }
 }
