@@ -38,8 +38,9 @@ class _HomeState extends State<Home> {
   img.Image imageInput;
   bool _busy = false;
   int inputSize = 1024; //input image size for the tflite model
-  double normalMean = 150.0;
-  double normalStd = 150.0;
+  double normalMean = 127.5;
+  double normalStd = 127.5;
+  ImageProcessor imageProcessor;
 
   Future getImage() async {
     var pickedImage = await picker.getImage(
@@ -68,24 +69,26 @@ class _HomeState extends State<Home> {
 
   Future imageResize(img.Image image) async {
     try {
-      int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
-      //print(cropSize);
-      //_inputImage = TensorImage.fromImage(image);
-      ImageProcessor imageProcessor = ImageProcessorBuilder()
-          .add(ResizeWithCropOrPadOp(
-            cropSize,
-            cropSize,
-          ))
-          .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
-          .add(NormalizeOp(normalMean, normalStd))
-          .build();
       _inputImage.loadImage(image);
-      //cropSize = min(_inputImage.width, _inputImage.height);
-      _inputImage = imageProcessor.process(_inputImage);
+      _inputImage = imageProcess(_inputImage);
     } on Exception catch (e) {
       print('failed to resize the image: $e');
     }
 //resize operation
+  }
+
+  TensorImage imageProcess(TensorImage inputTensorImage) {
+    int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
+    imageProcessor = ImageProcessorBuilder()
+        .add(ResizeWithCropOrPadOp(
+          cropSize,
+          cropSize,
+        ))
+        .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
+        .add(NormalizeOp(normalMean, normalStd))
+        .build();
+    inputTensorImage = imageProcessor.process(inputTensorImage);
+    return inputTensorImage;
   }
 
   Future loadModel() async {
@@ -132,7 +135,6 @@ class _HomeState extends State<Home> {
     List<Object> inputs = [_inputImage.buffer];
 
     interpreter.runForMultipleInputs(inputs, outputs);
-    //print('model ran');
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
@@ -146,7 +148,6 @@ class _HomeState extends State<Home> {
     List<Recognition> recognitions = [];
 
     var gridWidth = _outputShape[0][1];
-    //print("gridWidth = $gridWidth");
 
     for (int i = 0; i < gridWidth; i++) {
       // Since we are given a list of scores for each class for
@@ -186,19 +187,6 @@ class _HomeState extends State<Home> {
             min(inputSize + 0.0, locations[i].right),
             min(inputSize + 0.0, locations[i].bottom));
 
-        int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
-        //print(cropSize);
-        //_inputImage = TensorImage.fromImage(image);
-        ImageProcessor imageProcessor = ImageProcessorBuilder()
-            .add(ResizeWithCropOrPadOp(
-              cropSize,
-              cropSize,
-            ))
-            .add(
-                ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
-            .add(NormalizeOp(normalMean, normalStd))
-            .build();
-
         // Gets the coordinates based on the original image if anything was done to it.
         Rect transformedRect = imageProcessor.inverseTransformRect(
           rectAti,
@@ -212,10 +200,11 @@ class _HomeState extends State<Home> {
       }
     }
     // End of for loop and added all recognitions
-    _busy = false;
+    interpreter.close();
     setState(() {
       results = nms(recognitions,
           labels); //Get the optimum bounding boxes from the prediction
+      _busy = false;
     });
   }
 
