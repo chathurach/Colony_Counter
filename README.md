@@ -1,8 +1,10 @@
-# yolo_tflite
+# Colony_Counter
 
-A new Flutter project.
+YOLO based machine learning app for counting of bacterial colonoes on a petri dish. This app is written in flutter with the use of tflite_flutter plugin.
 
 ## Getting Started
+
+Build the app and run with 'flutter run' on a competible androif device.
 
 This project is a starting point for a Flutter application.
 
