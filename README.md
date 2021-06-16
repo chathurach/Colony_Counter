@@ -1,6 +1,6 @@
 # Colony_Counter
 
-YOLO based machine learning app for counting of bacterial colonoes on a petri dish. This app is written in flutter with the use of tflite_flutter plugin.
+YOLO based machine learning app for counting of bacterial colonies on a petri dish. This app is written in flutter with the use of tflite_flutter plugin.
 
 ## Getting Started
 
