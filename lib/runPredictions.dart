@@ -36,13 +36,7 @@ Future<List<Recognition>> prediction(img.Image image) async {
 
   //Loading Model
 
-  try {
-    _inputImage.loadImage(image);
-    returnProcess = await imageProcess(_inputShape);
-    _inputImage = returnProcess.process(_inputImage);
-  } on Exception catch (e) {
-    print('failed to resize the image: $e');
-  }
+  
 
   try {
     //interpreter = interpreter2;
@@ -71,6 +65,14 @@ Future<List<Recognition>> prediction(img.Image image) async {
     print('Error while loading the model: $e');
   }
 //end of Model Loading
+
+try {
+    _inputImage.loadImage(image);
+    returnProcess = await imageProcess(_inputShape);
+    _inputImage = returnProcess.process(_inputImage);
+  } on Exception catch (e) {
+    print('failed to resize the image: $e');
+  }
 
 // Image resizing
 

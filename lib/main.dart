@@ -67,166 +67,166 @@ class _HomeState extends State<Home> {
     CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
     //results = await compute(predict(), imageInput);
     _busy = true;
-    compute<img.Image, List<Recognition>>(prediction, imageInput)
-        .then((value) => results)
-        .then((value) => _busy = false);
-    // setState(() {
-    //   compute(predict, imageInput).then((value) => results);
-    // });
-    //predict(imageInput);
+
+    await predict(imageInput).then((value) => {
+          setState(() {
+            results = value;
+            _busy = false;
+          })
+        });
   }
 
-//   Future imageResize(img.Image image) async {
-//     try {
-//       _inputImage.loadImage(image);
-//       _inputImage = imageProcess(_inputImage);
-//     } on Exception catch (e) {
-//       print('failed to resize the image: $e');
-//     }
-// //resize operation
-//   }
+  Future imageResize(img.Image image) async {
+    try {
+      _inputImage.loadImage(image);
+      _inputImage = imageProcess(_inputImage);
+    } on Exception catch (e) {
+      print('failed to resize the image: $e');
+    }
+//resize operation
+  }
 
-//   TensorImage imageProcess(TensorImage inputTensorImage) {
-//     //int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
-//     int cropSize = min(1024, 1024);
-//     imageProcessor = ImageProcessorBuilder()
-//         .add(ResizeWithCropOrPadOp(
-//           cropSize,
-//           cropSize,
-//         ))
-//         .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
-//         .add(NormalizeOp(127.5, 127.5))
-//         .build();
-//     inputTensorImage = imageProcessor.process(inputTensorImage);
-//     return inputTensorImage;
-//   }
+  TensorImage imageProcess(TensorImage inputTensorImage) {
+    int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
+    //int cropSize = min(1024, 1024);
+    imageProcessor = ImageProcessorBuilder()
+        .add(ResizeWithCropOrPadOp(
+          cropSize,
+          cropSize,
+        ))
+        .add(ResizeOp(_inputShape[1], _inputShape[2], ResizeMethod.BILINEAR))
+        .add(NormalizeOp(normalMean, normalStd))
+        .build();
+    inputTensorImage = imageProcessor.process(inputTensorImage);
+    return inputTensorImage;
+  }
 
-//   Future loadModel() async {
-//     try {
-//       interpreter = await tfl.Interpreter.fromAsset(
-//         'yolov4-416.tflite',
-//         options: tfl.InterpreterOptions()..threads = 4,
-//       );
-//       labels = await FileUtil.loadLabels('assets/labels.txt');
+  Future loadModel() async {
+    try {
+      interpreter = await tfl.Interpreter.fromAsset(
+        'yolov4-416.tflite',
+        options: tfl.InterpreterOptions()..threads = 4,
+      );
+      labels = await FileUtil.loadLabels('assets/labels.txt');
 
-//       _inputShape = interpreter.getInputTensor(0).shape;
-//       //_inputType = interpreter.getInputTensor(0).type;
+      _inputShape = interpreter.getInputTensor(0).shape;
+      //_inputType = interpreter.getInputTensor(0).type;
 
-//       var _outputTensors = interpreter.getOutputTensors();
-//       _outputShape = [];
-//       _outputType = [];
-//       _outputTensors.forEach((tfl.Tensor tensor) {
-//         _outputShape.add(tensor.shape);
-//         _outputType.add(tensor.type);
-//       });
+      var _outputTensors = interpreter.getOutputTensors();
+      _outputShape = [];
+      _outputType = [];
+      _outputTensors.forEach((tfl.Tensor tensor) {
+        _outputShape.add(tensor.shape);
+        _outputType.add(tensor.type);
+      });
 
-//       //print('load model sucess!');
-//     } on Exception catch (e) {
-//       print('Error while loading the model: $e');
-//     }
-//   }
+      //print('load model sucess!');
+    } on Exception catch (e) {
+      print('Error while loading the model: $e');
+    }
+  }
 
-// // Main function starts to load the model and start the prediction process
+// Main function starts to load the model and start the prediction process
 
-//   Future<List<Recognition>> predict(img.Image image) async {
-//     await loadModel();
-//     await imageResize(image);
-//     TensorBuffer outputLocations = TensorBufferFloat(_outputShape[0]);
+  Future<List<Recognition>> predict(img.Image image) async {
+    await loadModel();
+    await imageResize(image);
+    TensorBuffer outputLocations = TensorBufferFloat(_outputShape[0]);
 
-//     List<List<List<double>>> outputClass = new List.generate(
-//         _outputShape[1][0],
-//         (_) => new List.generate(
-//             _outputShape[1][1], (_) => new List.filled(_outputShape[1][2], 0.0),
-//             growable: false),
-//         growable: false);
+    List<List<List<double>>> outputClass = new List.generate(
+        _outputShape[1][0],
+        (_) => new List.generate(
+            _outputShape[1][1], (_) => new List.filled(_outputShape[1][2], 0.0),
+            growable: false),
+        growable: false);
 
-//     Map<int, Object> outputs = {
-//       0: outputLocations.buffer,
-//       1: outputClass,
-//     };
-//     List<Object> inputs = [_inputImage.buffer];
+    Map<int, Object> outputs = {
+      0: outputLocations.buffer,
+      1: outputClass,
+    };
+    List<Object> inputs = [_inputImage.buffer];
 
-//     interpreter.runForMultipleInputs(inputs, outputs);
+    interpreter.runForMultipleInputs(inputs, outputs);
 
-//     List<Rect> locations = BoundingBoxUtils.convert(
-//       tensor: outputLocations,
-//       boundingBoxAxis: 2,
-//       boundingBoxType: BoundingBoxType.CENTER,
-//       coordinateType: CoordinateType.PIXEL,
-//       // height: inputSize,
-//       // width: inputSize,
-//       height: 1024,
-//       width: 1024,
-//     );
+    List<Rect> locations = BoundingBoxUtils.convert(
+      tensor: outputLocations,
+      boundingBoxAxis: 2,
+      boundingBoxType: BoundingBoxType.CENTER,
+      coordinateType: CoordinateType.PIXEL,
+      height: inputSize,
+      width: inputSize,
+      // height: 1024,
+      // width: 1024,
+    );
 
-//     List<Recognition> recognitions = [];
+    List<Recognition> recognitions = [];
 
-//     var gridWidth = _outputShape[0][1];
+    var gridWidth = _outputShape[0][1];
 
-//     for (int i = 0; i < gridWidth; i++) {
-//       // Since we are given a list of scores for each class for
-//       // each detected Object, we are interested in finding the class
-//       // with the highest output score
-//       var maxClassScore = 0.00;
-//       var labelIndex = -1;
+    for (int i = 0; i < gridWidth; i++) {
+      // Since we are given a list of scores for each class for
+      // each detected Object, we are interested in finding the class
+      // with the highest output score
+      var maxClassScore = 0.00;
+      var labelIndex = -1;
 
-//       for (int c = 0; c < labels.length; c++) {
-//         // output[0][i][c] is the confidence score of c class
-//         if (outputClass[0][i][c] > maxClassScore) {
-//           labelIndex = c;
-//           maxClassScore = outputClass[0][i][c];
-//         }
-//       }
-//       // Prediction score
-//       var score = maxClassScore;
+      for (int c = 0; c < labels.length; c++) {
+        // output[0][i][c] is the confidence score of c class
+        if (outputClass[0][i][c] > maxClassScore) {
+          labelIndex = c;
+          maxClassScore = outputClass[0][i][c];
+        }
+      }
+      // Prediction score
+      var score = maxClassScore;
 
-//       var label;
-//       if (labelIndex != -1) {
-//         // Label string
-//         label = labels.elementAt(labelIndex);
-//         //print(label);
-//       } else {
-//         label = null;
-//       }
-//       // Makes sure the confidence is above the
-//       // minimum threshold score for each object.
-//       if (score > 0.4) {
-//         // inverse of rect
-//         // [locations] corresponds to the inputSize
-//         // inverseTransformRect transforms it our [inputImage]
+      var label;
+      if (labelIndex != -1) {
+        // Label string
+        label = labels.elementAt(labelIndex);
+        //print(label);
+      } else {
+        label = null;
+      }
+      // Makes sure the confidence is above the
+      // minimum threshold score for each object.
+      if (score > 0.4) {
+        // inverse of rect
+        // [locations] corresponds to the inputSize
+        // inverseTransformRect transforms it our [inputImage]
 
-//         Rect rectAti = Rect.fromLTRB(
-//             max(0, locations[i].left),
-//             max(0, locations[i].top),
-//             // min(inputSize + 0.0, locations[i].right),
-//             // min(inputSize + 0.0, locations[i].bottom));
-//             min(1024 + 0.0, locations[i].right),
-//             min(1024 + 0.0, locations[i].bottom));
+        Rect rectAti = Rect.fromLTRB(
+            max(0, locations[i].left),
+            max(0, locations[i].top),
+            min(inputSize + 0.0, locations[i].right),
+            min(inputSize + 0.0, locations[i].bottom));
+        // min(1024 + 0.0, locations[i].right),
+        // min(1024 + 0.0, locations[i].bottom));
 
-//         // Gets the coordinates based on the original image if anything was done to it.
-//         Rect transformedRect = imageProcessor.inverseTransformRect(
-//           rectAti,
-//           1024,
-//           1024,
-//           // _imageHeight.toInt(),
-//           // _imageWidth.toInt(),
-//         );
+        // Gets the coordinates based on the original image if anything was done to it.
+        Rect transformedRect = imageProcessor.inverseTransformRect(
+          rectAti,
+          // 1024,
+          // 1024,
+          _imageHeight.toInt(),
+          _imageWidth.toInt(),
+        );
 
-//         recognitions.add(
-//           Recognition(i, label, score, transformedRect),
-//         );
-//       }
-//     }
-//     // End of for loop and added all recognitions
-//     interpreter.close();
-//     return nms(recognitions, labels);
-//     // results = nms(recognitions, labels);
-//     // setState(() {
-//     //   results = nms(recognitions,
-//     //       labels); //Get the optimum bounding boxes from the prediction
-//     //   _busy = false;
-//     // });
-//   }
+        recognitions.add(
+          Recognition(i, label, score, transformedRect),
+        );
+      }
+    }
+    // End of for loop and added all recognitions
+    interpreter.close();
+    return nms(recognitions, labels);
+    // results = nms(recognitions, labels);
+    // setState(() {
+    //   results = nms(recognitions,
+    //       labels); //Get the optimum bounding boxes from the prediction
+    //   _busy = false;
+    // });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +273,7 @@ class _HomeState extends State<Home> {
 
   Widget imageShow(BuildContext context) {
     Widget child;
-    if (_imageWidget != null && _busy == false) {
+    if (_imageWidget != null && !_busy) {
       child = Stack(
         children: <Widget>[
           _imageWidget,
