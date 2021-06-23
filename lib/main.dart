@@ -220,12 +220,6 @@ class _HomeState extends State<Home> {
     // End of for loop and added all recognitions
     interpreter.close();
     return nms(recognitions, labels);
-    // results = nms(recognitions, labels);
-    // setState(() {
-    //   results = nms(recognitions,
-    //       labels); //Get the optimum bounding boxes from the prediction
-    //   _busy = false;
-    // });
   }
 
   @override
