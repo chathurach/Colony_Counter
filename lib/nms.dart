@@ -5,9 +5,9 @@ import 'package:collection/collection.dart';
 //var labels;
 
 List<Recognition> nms(List<Recognition> list,
-    var labels) // Turned from Java's ArrayList to Dart's List.
+    List<String> labels) // Turned from Java's ArrayList to Dart's List.
 {
-  List<Recognition> nmsList = new List<Recognition>();
+  List<Recognition> nmsList = <Recognition>[];
 
   for (int k = 0; k < labels.length; k++) {
     // 1.find max confidence per class

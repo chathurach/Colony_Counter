@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -66,14 +68,20 @@ class _HomeState extends State<Home> {
     CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
     CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
     //results = await compute(predict(), imageInput);
-    _busy = true;
 
-    await predict(imageInput).then((value) => {
-          setState(() {
-            results = value;
-            _busy = false;
-          })
-        });
+    setState(() {
+      _busy = true;
+    });
+
+// give some time to load the loading screen
+    await Future.delayed(Duration(microseconds: 200), () {
+      predict(imageInput).then((value) => {
+            setState(() {
+              results = value;
+              _busy = false;
+            })
+          });
+    });
   }
 
   Future imageResize(img.Image image) async {
@@ -88,7 +96,6 @@ class _HomeState extends State<Home> {
 
   TensorImage imageProcess(TensorImage inputTensorImage) {
     int cropSize = min(_imageHeight.toInt(), _imageWidth.toInt());
-    //int cropSize = min(1024, 1024);
     imageProcessor = ImageProcessorBuilder()
         .add(ResizeWithCropOrPadOp(
           cropSize,
@@ -155,71 +162,78 @@ class _HomeState extends State<Home> {
       coordinateType: CoordinateType.PIXEL,
       height: inputSize,
       width: inputSize,
-      // height: 1024,
-      // width: 1024,
     );
 
-    List<Recognition> recognitions = [];
+    //List<Recognition> recognitions = [];
 
     var gridWidth = _outputShape[0][1];
 
-    for (int i = 0; i < gridWidth; i++) {
-      // Since we are given a list of scores for each class for
-      // each detected Object, we are interested in finding the class
-      // with the highest output score
-      var maxClassScore = 0.00;
-      var labelIndex = -1;
+    Map map = Map();
+    map['val1'] = labels;
+    map['val2'] = gridWidth;
+    map['val3'] = outputClass;
+    map['val4'] = locations;
+    map['val5'] = imageProcessor;
+    map['val6'] = _imageHeight;
+    map['val7'] = _imageWidth;
+    map['val8'] = inputSize;
 
-      for (int c = 0; c < labels.length; c++) {
-        // output[0][i][c] is the confidence score of c class
-        if (outputClass[0][i][c] > maxClassScore) {
-          labelIndex = c;
-          maxClassScore = outputClass[0][i][c];
-        }
-      }
-      // Prediction score
-      var score = maxClassScore;
+    var fromCompute = await compute(getRecognitions, map);
 
-      var label;
-      if (labelIndex != -1) {
-        // Label string
-        label = labels.elementAt(labelIndex);
-        //print(label);
-      } else {
-        label = null;
-      }
-      // Makes sure the confidence is above the
-      // minimum threshold score for each object.
-      if (score > 0.4) {
-        // inverse of rect
-        // [locations] corresponds to the inputSize
-        // inverseTransformRect transforms it our [inputImage]
+    // for (int i = 0; i < gridWidth; i++) {
+    //   // Since we are given a list of scores for each class for
+    //   // each detected Object, we are interested in finding the class
+    //   // with the highest output score
+    //   var maxClassScore = 0.00;
+    //   var labelIndex = -1;
 
-        Rect rectAti = Rect.fromLTRB(
-            max(0, locations[i].left),
-            max(0, locations[i].top),
-            min(inputSize + 0.0, locations[i].right),
-            min(inputSize + 0.0, locations[i].bottom));
-        // min(1024 + 0.0, locations[i].right),
-        // min(1024 + 0.0, locations[i].bottom));
+    //   for (int c = 0; c < labels.length; c++) {
+    //     // output[0][i][c] is the confidence score of c class
+    //     if (outputClass[0][i][c] > maxClassScore) {
+    //       labelIndex = c;
+    //       maxClassScore = outputClass[0][i][c];
+    //     }
+    //   }
+    //   // Prediction score
+    //   var score = maxClassScore;
 
-        // Gets the coordinates based on the original image if anything was done to it.
-        Rect transformedRect = imageProcessor.inverseTransformRect(
-          rectAti,
-          // 1024,
-          // 1024,
-          _imageHeight.toInt(),
-          _imageWidth.toInt(),
-        );
+    //   var label;
+    //   if (labelIndex != -1) {
+    //     // Label string
+    //     label = labels.elementAt(labelIndex);
+    //     //print(label);
+    //   } else {
+    //     label = null;
+    //   }
+    //   // Makes sure the confidence is above the
+    //   // minimum threshold score for each object.
+    //   if (score > 0.4) {
+    //     // inverse of rect
+    //     // [locations] corresponds to the inputSize
+    //     // inverseTransformRect transforms it our [inputImage]
 
-        recognitions.add(
-          Recognition(i, label, score, transformedRect),
-        );
-      }
-    }
+    //     Rect rectAti = Rect.fromLTRB(
+    //         max(0, locations[i].left),
+    //         max(0, locations[i].top),
+    //         min(inputSize + 0.0, locations[i].right),
+    //         min(inputSize + 0.0, locations[i].bottom));
+
+    //     // Gets the coordinates based on the original image if anything was done to it.
+    //     Rect transformedRect = imageProcessor.inverseTransformRect(
+    //       rectAti,
+    //       _imageHeight.toInt(),
+    //       _imageWidth.toInt(),
+    //     );
+
+    //     recognitions.add(
+    //       //await compute<[int, String, double, Rect],Rect>(Recognition,[i,label,score,transformedRect]);
+    //       Recognition(i, label, score, transformedRect),
+    //     );
+    //   }
+    //}
     // End of for loop and added all recognitions
     interpreter.close();
-    return nms(recognitions, labels);
+    return fromCompute;
   }
 
   @override
