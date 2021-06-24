@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,9 +13,9 @@ import 'dart:math';
 import 'package:yolo_tflite/box_widget.dart';
 import 'package:yolo_tflite/camera_view_singleton.dart';
 import 'package:flutter/services.dart';
-import 'package:loading_overlay/loading_overlay.dart';
-import 'package:yolo_tflite/nms.dart';
+
 import 'package:yolo_tflite/runPredictions.dart';
+import 'package:loading_animations/loading_animations.dart';
 
 void main() => runApp(MaterialApp(
       home: Home(),
@@ -46,42 +47,43 @@ class _HomeState extends State<Home> {
   double normalStd = 127.5;
   ImageProcessor imageProcessor;
 
-  Future getImage() async {
+  Future getImage(ImageSource key) async {
     var pickedImage = await picker.getImage(
-      source: ImageSource.gallery,
+      source: key,
       maxWidth: 1500,
       maxHeight: 1500,
     );
 
-    _image = File(pickedImage.path);
-    _imageWidget = Image.file(_image);
-    imageInput = img.decodeImage(_image.readAsBytesSync());
-    _imageWidth = imageInput.width.toDouble();
-    _imageHeight = imageInput.height.toDouble();
-    Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
-    CameraViewSingleton.inputImageSize = imageSize;
-    double ratio = imageSize.width / imageSize.height;
-    double scWidth = MediaQuery.of(context).size.width;
-    double scHeigth = scWidth * ratio;
-    Size screenSize = Size(scWidth, scHeigth);
-    CameraViewSingleton.screenSize = screenSize;
-    CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
-    CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
-    //results = await compute(predict(), imageInput);
+    if (pickedImage != null) {
+      _image = File(pickedImage.path);
+      _imageWidget = Image.file(_image);
+      imageInput = img.decodeImage(_image.readAsBytesSync());
+      _imageWidth = imageInput.width.toDouble();
+      _imageHeight = imageInput.height.toDouble();
+      Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
+      CameraViewSingleton.inputImageSize = imageSize;
+      double ratio = imageSize.width / imageSize.height;
+      double scWidth = MediaQuery.of(context).size.width;
+      double scHeigth = scWidth * ratio;
+      Size screenSize = Size(scWidth, scHeigth);
+      CameraViewSingleton.screenSize = screenSize;
+      CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
+      CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
 
-    setState(() {
-      _busy = true;
-    });
+      setState(() {
+        _busy = true;
+      });
 
 // give some time to load the loading screen
-    await Future.delayed(Duration(microseconds: 200), () {
-      predict(imageInput).then((value) => {
-            setState(() {
-              results = value;
-              _busy = false;
-            })
-          });
-    });
+      await Future.delayed(Duration(microseconds: 200), () {
+        predict(imageInput).then((value) => {
+              setState(() {
+                results = value;
+                _busy = false;
+              })
+            });
+      });
+    }
   }
 
   Future imageResize(img.Image image) async {
@@ -167,7 +169,7 @@ class _HomeState extends State<Home> {
     //List<Recognition> recognitions = [];
 
     var gridWidth = _outputShape[0][1];
-
+    // Put variables in to a map to feed to the isolate
     Map map = Map();
     map['val1'] = labels;
     map['val2'] = gridWidth;
@@ -178,59 +180,9 @@ class _HomeState extends State<Home> {
     map['val7'] = _imageWidth;
     map['val8'] = inputSize;
 
+    //Spin ups a isolate to calculate bounding boxes
     var fromCompute = await compute(getRecognitions, map);
 
-    // for (int i = 0; i < gridWidth; i++) {
-    //   // Since we are given a list of scores for each class for
-    //   // each detected Object, we are interested in finding the class
-    //   // with the highest output score
-    //   var maxClassScore = 0.00;
-    //   var labelIndex = -1;
-
-    //   for (int c = 0; c < labels.length; c++) {
-    //     // output[0][i][c] is the confidence score of c class
-    //     if (outputClass[0][i][c] > maxClassScore) {
-    //       labelIndex = c;
-    //       maxClassScore = outputClass[0][i][c];
-    //     }
-    //   }
-    //   // Prediction score
-    //   var score = maxClassScore;
-
-    //   var label;
-    //   if (labelIndex != -1) {
-    //     // Label string
-    //     label = labels.elementAt(labelIndex);
-    //     //print(label);
-    //   } else {
-    //     label = null;
-    //   }
-    //   // Makes sure the confidence is above the
-    //   // minimum threshold score for each object.
-    //   if (score > 0.4) {
-    //     // inverse of rect
-    //     // [locations] corresponds to the inputSize
-    //     // inverseTransformRect transforms it our [inputImage]
-
-    //     Rect rectAti = Rect.fromLTRB(
-    //         max(0, locations[i].left),
-    //         max(0, locations[i].top),
-    //         min(inputSize + 0.0, locations[i].right),
-    //         min(inputSize + 0.0, locations[i].bottom));
-
-    //     // Gets the coordinates based on the original image if anything was done to it.
-    //     Rect transformedRect = imageProcessor.inverseTransformRect(
-    //       rectAti,
-    //       _imageHeight.toInt(),
-    //       _imageWidth.toInt(),
-    //     );
-
-    //     recognitions.add(
-    //       //await compute<[int, String, double, Rect],Rect>(Recognition,[i,label,score,transformedRect]);
-    //       Recognition(i, label, score, transformedRect),
-    //     );
-    //   }
-    //}
     // End of for loop and added all recognitions
     interpreter.close();
     return fromCompute;
@@ -245,23 +197,7 @@ class _HomeState extends State<Home> {
           child: Text('Colony Count'),
         ),
       ),
-      body: LoadingOverlay(
-        isLoading: _busy,
-        opacity: 1.0,
-        color: Colors.white,
-        child: imageShow(context),
-        progressIndicator: CircularProgressIndicator(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          setState(() {
-            _busy = false;
-          });
-          getImage();
-        },
-        tooltip: 'Pick Image',
-        child: Icon(Icons.add_a_photo),
-      ),
+      body: imageShow(context),
     );
   }
 
@@ -282,38 +218,72 @@ class _HomeState extends State<Home> {
   Widget imageShow(BuildContext context) {
     Widget child;
     if (_imageWidget != null && !_busy) {
-      child = Stack(
-        children: <Widget>[
-          _imageWidget,
-          boundingBoxes(results),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: MediaQuery.of(context).size.height / 4,
-              width: MediaQuery.of(context).size.width,
-              child: Center(
-                child: Text(
-                  "Colony Count - " + results.length.toString(),
-                  textScaleFactor: 1.5,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+      child = Column(
+        children: [
+          Container(
+            width: MediaQuery.of(context).size.width,
+            height: _imageHeight,
+            child: Stack(
+              children: <Widget>[
+                _imageWidget,
+                boundingBoxes(results),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                "Colony Count - " + results.length.toString(),
+                textScaleFactor: 1.5,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              color: Colors.white,
             ),
           ),
         ],
       );
+    } else if (!_busy && _imageWidget == null) {
+      child = Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                'Take a picture!',
+                textScaleFactor: 1.5,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(25.0),
+            child: Row(
+              children: [
+                FloatingActionButton(
+                  onPressed: () {
+                    getImage(ImageSource.gallery);
+                  },
+                  tooltip: 'Pick Image Using Gallery',
+                  child: Icon(Icons.add_photo_alternate),
+                ),
+                FloatingActionButton(
+                  onPressed: () {
+                    getImage(ImageSource.camera);
+                  },
+                  tooltip: 'Pick Image Using Camera',
+                  child: Icon(Icons.add_a_photo),
+                ),
+              ],
+            ),
+          )
+        ],
+      );
     } else {
       child = Center(
-          child: Text(
-        'Take a picture!',
-        textScaleFactor: 1.5,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-        ),
-      ));
+        child: LoadingBouncingGrid.circle(),
+      );
     }
 
     return new Container(child: child);
