@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -58,17 +57,19 @@ class _HomeState extends State<Home> {
       _image = File(pickedImage.path);
       _imageWidget = Image.file(_image);
       imageInput = img.decodeImage(_image.readAsBytesSync());
-      _imageWidth = imageInput.width.toDouble();
-      _imageHeight = imageInput.height.toDouble();
+      _imageWidth = imageInput.height.toDouble();
+      _imageHeight = imageInput.width.toDouble();
+
       Size imageSize = Size(_imageWidth.toDouble(), _imageHeight.toDouble());
       CameraViewSingleton.inputImageSize = imageSize;
-      double ratio = imageSize.width / imageSize.height;
+      double ratio = imageSize.height / imageSize.width;
       double scWidth = MediaQuery.of(context).size.width;
+
       double scHeigth = scWidth * ratio;
+
       Size screenSize = Size(scWidth, scHeigth);
       CameraViewSingleton.screenSize = screenSize;
-      CameraViewSingleton.ratioY = screenSize.width / imageSize.height;
-      CameraViewSingleton.ratioX = screenSize.height / imageSize.width;
+      CameraViewSingleton.ratioX = screenSize.width / imageSize.width;
 
       setState(() {
         _busy = true;
@@ -159,14 +160,13 @@ class _HomeState extends State<Home> {
 
     List<Rect> locations = BoundingBoxUtils.convert(
       tensor: outputLocations,
+      valueIndex: [0, 1, 3, 2],
       boundingBoxAxis: 2,
       boundingBoxType: BoundingBoxType.CENTER,
       coordinateType: CoordinateType.PIXEL,
       height: inputSize,
       width: inputSize,
     );
-
-    //List<Recognition> recognitions = [];
 
     var gridWidth = _outputShape[0][1];
     // Put variables in to a map to feed to the isolate
@@ -207,6 +207,7 @@ class _HomeState extends State<Home> {
       return Container();
     }
     return Stack(
+      alignment: Alignment.topLeft,
       children: results
           .map((e) => BoxWidget(
                 result: e,
@@ -218,30 +219,53 @@ class _HomeState extends State<Home> {
   Widget imageShow(BuildContext context) {
     Widget child;
     if (_imageWidget != null && !_busy) {
-      child = Column(
-        children: [
-          Container(
-            width: MediaQuery.of(context).size.width,
-            height: _imageHeight,
-            child: Stack(
-              children: <Widget>[
-                _imageWidget,
-                boundingBoxes(results),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                "Colony Count - " + results.length.toString(),
-                textScaleFactor: 1.5,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+      child = Container(
+        height: MediaQuery.of(context).size.height,
+        child: Column(
+          children: [
+            Container(
+              alignment: Alignment.topLeft,
+              width: MediaQuery.of(context).size.width,
+              //height: _imageHeight,
+              height: _imageHeight *
+                  MediaQuery.of(context).size.width /
+                  _imageWidth,
+              child: Stack(
+                alignment: Alignment.topLeft,
+                children: <Widget>[
+                  _imageWidget,
+                  boundingBoxes(results),
+                ],
               ),
             ),
-          ),
-        ],
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    "Colony Count - " + results.length.toString(),
+                    textScaleFactor: 1.5,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Center(
+                    child: FloatingActionButton(
+                      onPressed: () {
+                        setState(() {
+                          _imageWidget = null;
+                          results = null;
+                          //_busy = false;
+                        });
+                      },
+                      tooltip: 'Back',
+                      child: Icon(Icons.arrow_back_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       );
     } else if (!_busy && _imageWidget == null) {
       child = Column(
@@ -261,19 +285,25 @@ class _HomeState extends State<Home> {
             padding: EdgeInsets.all(25.0),
             child: Row(
               children: [
-                FloatingActionButton(
-                  onPressed: () {
-                    getImage(ImageSource.gallery);
-                  },
-                  tooltip: 'Pick Image Using Gallery',
-                  child: Icon(Icons.add_photo_alternate),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: FloatingActionButton(
+                    onPressed: () {
+                      getImage(ImageSource.gallery);
+                    },
+                    tooltip: 'Pick Image Using Gallery',
+                    child: Icon(Icons.add_photo_alternate),
+                  ),
                 ),
-                FloatingActionButton(
-                  onPressed: () {
-                    getImage(ImageSource.camera);
-                  },
-                  tooltip: 'Pick Image Using Camera',
-                  child: Icon(Icons.add_a_photo),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: FloatingActionButton(
+                    onPressed: () {
+                      getImage(ImageSource.camera);
+                    },
+                    tooltip: 'Pick Image Using Camera',
+                    child: Icon(Icons.add_a_photo),
+                  ),
                 ),
               ],
             ),

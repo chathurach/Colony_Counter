@@ -1,18 +1,9 @@
 import 'package:yolo_tflite/recognition.dart';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
-import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
-import 'package:image/image.dart' as img;
-import 'package:yolo_tflite/recognition.dart';
+
 import 'dart:math';
-import 'package:yolo_tflite/box_widget.dart';
-import 'package:yolo_tflite/camera_view_singleton.dart';
-import 'package:flutter/services.dart';
-import 'package:loading_overlay/loading_overlay.dart';
+
 import 'package:yolo_tflite/nms.dart';
 
 List<Recognition> getRecognitions(Map map) {
@@ -54,7 +45,7 @@ List<Recognition> getRecognitions(Map map) {
     }
     // Makes sure the confidence is above the
     // minimum threshold score for each object.
-    if (score > 0.7) {
+    if (score > 0.4) {
       // inverse of rect
       // [locations] corresponds to the inputSize
       // inverseTransformRect transforms it our [inputImage]
@@ -66,14 +57,14 @@ List<Recognition> getRecognitions(Map map) {
           min(inputSize + 0.0, locations[i].bottom));
 
       // Gets the coordinates based on the original image if anything was done to it.
+
       Rect transformedRect = imageProcessor.inverseTransformRect(
         rectAti,
-        _imageHeight.toInt(),
         _imageWidth.toInt(),
+        _imageHeight.toInt(),
       );
 
       recognitions.add(
-        //await compute<[int, String, double, Rect],Rect>(Recognition,[i,label,score,transformedRect]);
         Recognition(i, label, score, transformedRect),
       );
     }

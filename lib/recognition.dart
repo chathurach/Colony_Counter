@@ -36,7 +36,7 @@ class Recognition implements Comparable<Recognition> {
 
     double transLeft = max(0.1,
         CameraViewSingleton.actualPreviewSize.width - location.bottom * ratioX);
-    double transTop = max(0.1, (location.right * ratioY) - 17.0);
+    double transTop = max(0.1, (location.right - 60) * ratioY);
     double transWidth = min(
         location.width * ratioX, CameraViewSingleton.actualPreviewSize.width);
     double transHeight = min(
