@@ -1,6 +1,8 @@
-# Colony_Counter
+# Bacterial Colony Counter App
 
 YOLO based machine learning app for counting of bacterial colonies on a petri dish. This app is written in flutter with the use of tflite_flutter plugin.
+
+![colonycount](https://user-images.githubusercontent.com/10696314/214071285-72fb453b-6f13-4ea0-a34b-6fef6c56449d.jpg)
 
 ## Getting Started
 
